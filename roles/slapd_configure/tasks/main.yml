@@ -6,37 +6,45 @@
 - name: "Create {{ tmp_dir }}"
   file: path={{ tmp_dir }} state=directory
 
+# ACL
+- name: Render acl.ldif
+  template:
+    src: "roles/{{role_name}}/templates/acl.ldif"
+    dest: "{{ tmp_dir }}/acl.ldif"
+
+- name: Apply acl.ldif
+  command: "ldapmodify -Y EXTERNAL -H ldapi:/// -f {{ tmp_dir }}/acl.ldif"
+# end ACL
+
+# modules
+- name: "Import modules"
+  import_tasks: modules.yml
+# End modules
+
 - name: Render general_config.ldif
-  template: 
+  template:
     src: "roles/{{role_name}}/templates/general_config.ldif"
     dest: "{{ tmp_dir }}/general_config.ldif"
 
 - name: Apply general_config.ldif
   command: "ldapmodify -Y EXTERNAL -H ldapi:/// -f {{ tmp_dir }}/general_config.ldif"
 
-- name: Render acl.ldif
-  template: 
-    src: "roles/{{role_name}}/templates/acl.ldif"
-    dest: "{{ tmp_dir }}/acl.ldif"
-
-- name: Apply acl.ldif
-  command: "ldapmodify -Y EXTERNAL -H ldapi:/// -f {{ tmp_dir }}/acl.ldif"
-
 # Schemas
 - name: "Import Schemas"
   import_tasks: schemas.yml
 # End Schemas
 
+# ENTRIES
 - name: Render template organizational-units.ldif
-  template: 
-    src: roles/{{role_name}}/templates/organizational-units.ldif
+  template:
+    src: roles/{{role_name}}/templates/entries/organizational-units.ldif
     dest: "{{ tmp_dir }}/organizational-units.ldif"
 
 - name: Add Directory content ldif
   command: "ldapadd -Y EXTERNAL -H ldapi:/// -f {{ tmp_dir }}/organizational-units.ldif"
 
 - name: Render template organizational-units.ldif
-  template: 
+  template:
     src: "roles/{{role_name}}/templates/entries/{{ item }}"
     dest: "{{ tmp_dir }}/{{ item }}"
   with_items:
@@ -59,6 +67,7 @@
   with_items:
     - "{{ import_example_users_ldif }}"
   when: import_example_users == True
+# end ENTRIES
 
 # overlays
 - name: "Import Overlays"
@@ -70,18 +79,18 @@
   import_tasks: ldaps.yml
 # end ldaps
 
-# log file
+# system task
 - name: "Change rsyslog log file to {{ logfile }}"
-  template: 
-    src: roles/{{role_name}}/templates/10-slapd.conf
+  template:
+    src: roles/{{role_name}}/templates/system/10-slapd.conf
     dest: /etc/rsyslog.d/10-slapd.conf
 
 - name: Restart rsyslog
   command: service rsyslog restart
 
 - name: "Configure logrotate"
-  template: 
-    src: roles/{{role_name}}/templates/slapd_logrotate
+  template:
+    src: roles/{{role_name}}/templates/system/slapd_logrotate
     dest: /etc/logrotate.d/slapd
 
 - name: Clean temporary config ldif
