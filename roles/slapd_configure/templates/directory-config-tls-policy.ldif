@@ -1,0 +1,12 @@
+# The server never asks the client for a valid certificate
+dn: cn=config
+changetype: modify
+replace: olcTLSCipherSuite
+olcTLSCipherSuite: NORMAL
+-
+replace: olcTLSCRLCheck
+olcTLSCRLCheck: none
+-
+replace: olcTLSVerifyClient
+olcTLSVerifyClient: try
+

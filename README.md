@@ -78,12 +78,38 @@ Setup Certificates
 ------------------
 
 In order to use SASL/TLS  you must have certificates, for testing purposes
-a self-signed certificate will suffice. To learn more about certificates, see OpenSSL.
-Remeber that OpenLDAP cannot use a certificate that have a password associated to it.
+a self-signed certificate will suffice. To learn more about certificates see OpenSSL.
 
 First of all create your certificates and put them in roles/files/certs/ then
 configure the FQDN associated to it in playbook variables. A script named make_CA.sh can do this automatically,
 it will create your own self signed keys with easy-rsa.
+
+_Remember_ that every client must have `slapd-cacert.pem` path configured in /etc/ldap.conf (pem file could be copied with scp or via web repository) or appending this information as environment variable:
+
+`LDAPTLS_CACERT=/path/cacert.pem ldapsearch -x -H ldaps://thathost.com -b dc=testunical,dc=com 'uid=peppe' -d1`. 
+
+If you don't want to validate the certificates in a ldaps:// connection just put `TLS_REQCERT never` in `/etc/ldap/ldap.conf`...;
+
+Check certificate validity with:
+
+`sudo openssl s_client -host idm.unical.it -port 636 -CAfile /etc/ssl/certs/unical.it/slapd-cacert.pem`
+
+If you need to upgrade your certificates you can do as follow, without restart slapd (olc behaviour):
+
+````
+ldapmodify -Y EXTERNAL -H ldapi:/// <<EOF
+dn: cn=config
+changetype:modify
+replace: olcTLSCACertificateFile
+olcTLSCACertificateFile: /path/slapd-cacert.pem
+-
+replace: olcTLSCertificateFile
+olcTLSCertificateFile: /path/slapd-cert.pem
+-
+replace: olcTLSCertificateKeyFile
+olcTLSCertificateKeyFile: /path/slapd-key.pem
+EOF
+````
 
 Play this book
 --------------
@@ -150,6 +176,12 @@ ldapsearch -H ldapi:// -Y EXTERNAL -b "olcDatabase={1}mdb,cn=config" -LLL -Q -s 
 
 # view SASL supporthem mechanisms
 ldapsearch -x -H ldapi:/// -b "" -LLL -s base supportedSASLMechanisms
+
+# view monitor statistics
+LDAPTLS_CACERT=/etc/ssl/certs/unical.it/ca.crt  ldapsearch -LLL -H ldaps://ldap.testunical.it  -D 'cn=monitor,ou=monitor,dc=unical,dc=it' -w monitosecret -b 'cn=Monitor' -s base '(objectClass=*)' '*' '+'
+
+LDAPTLS_CACERT=/etc/ssl/certs/unical.it/ca.crt  ldapsearch -LLL -H ldaps://ldap.testunical.it  -D "cn=monitor,ou=monitor,dc=unical,dc=it"   -w monitorsecret -b "cn=monitor"
+
 ````
 
 Access Control lists debug
@@ -189,6 +221,12 @@ ldapsearch -H ldapi:// -Y EXTERNAL -b "ou=people,dc=testunical,dc=it" -LLL "*" +
 
 # complex query with filters
 ldapsearch -H ldapi:// -D "uid=peppe,ou=people,dc=testunical,dc=it" -w pass  -b 'uid=peppe,ou=people,dc=testunical,dc=it' '(&(objectClass=inetOrgPerson)(objectClass=organizationalPerson)(objectClass=person)(objectClass=userSecurityInformation)(objectClass=eduPerson)(objectClass=radiusprofile)(objectClass=sambaSamAccount)(objectClass=schacContactLocation)(objectClass=schacEmployeeInfo)(objectClass=schacEntryConfidentiality)(objectClass=schacEntryMetadata)(objectClass=schacExperimentalOC)(objectClass=schacGroupMembership)(objectClass=schacLinkageIdentifiers)(objectClass=schacPersonalCharacteristics)(objectClass=schacUserEntitlements)(&(pwdChangedTime>=20180701000000Z)(pwdChangedTime<=20180709000000Z)))'
+
+# mixing two AND in one OR
+"(|(&(sn=aiello)(givenName=isabella))(&(sn=de marco)(givenName=giuseppe)))"
+
+# the same as the previous but with wildcard
+"(|(&(sn=aiello)(givenName=isabella))(&(sn=de marco)(schacPersonalUniqueCode=*DMRGPP*)))"
 
 # The subschema is a representation of the available classes and attributes.
 ldapsearch -H ldapi:// -Y EXTERNAL -b "dc=testunical,dc=it" -LLL subschemaSubentry
@@ -437,7 +475,6 @@ Hints
 - Be aware that ldapmodify is sensitive to (trailing) spaces, if your editor removes trailing space on save...;
 - https://www.openldap.org/doc/admin24/appendix-common-errors.html
 - Error 80 (implementation specific error) raises when tls certs doesn't have read permissions or if the ldif used with ldapadd/ldapmodify have some trailing spaces or too many blank lines or some syntax error. In other words for everything not well undestood, found in a ldif file, by slapd interpreter;
-- every client must have slapd-cacert.pem configured in /etc/ldap.conf (pem file could be copied with scp) if a Private CA is used in a ldaps:// connection;
 - Passwords in the CSV example file will be stored by LDAP in cleartex format, don't do this in production environment, {SSHA} is a good choice. You can find a good SSHA generator here: https://github.com/peppelinux/pySSHA-slapd
 - SCHACH objectClasses are well listed here: https://wiki.refeds.org/display/STAN/SCHAC+OID+Registry
 - https://confluence.atlassian.com/kb/how-to-write-ldap-search-filters-792496933.html
